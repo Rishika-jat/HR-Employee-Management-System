@@ -155,5 +155,13 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(logId) && isValidLog(incoming());
       allow update, delete: if false; // Logs are write-once read-many audit trails
     }
+
+    match /system/{systemId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /test/{testId} {
+      allow read: if true;
+    }
   }
 }
