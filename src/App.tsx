@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building, 
   Users, 
@@ -16,7 +16,6 @@ import {
   CheckCircle,
   Activity
 } from 'lucide-react';
-import { useFirebase } from './FirebaseContext';
 
 // Subcomponents
 import DashboardOverview from './components/DashboardOverview';
@@ -27,6 +26,15 @@ import PayrollSection from './components/PayrollSection';
 import DocumentSection from './components/DocumentSection';
 import AiAssistantSection from './components/AiAssistantSection';
 
+// Initial Mock Data
+import { 
+  INITIAL_EMPLOYEES, 
+  INITIAL_ATTENDANCE, 
+  INITIAL_LEAVES, 
+  INITIAL_PAYROLL, 
+  INITIAL_DOCUMENTS, 
+  INITIAL_LOGS 
+} from './defaultData';
 import { 
   Employee, 
   AttendanceRecord, 
@@ -39,145 +47,272 @@ import {
 } from './types';
 
 export default function App() {
-  const {
-    user,
-    loadingAuth,
-    loadingData,
-    employees,
-    attendance,
-    leaves,
-    payroll,
-    documents,
-    logs,
-    login,
-    logout,
-    addEmployee,
-    editEmployee,
-    deleteEmployee,
-    checkIn,
-    checkOut,
-    updateAttendanceStatus,
-    submitLeaveRequest,
-    approveLeave,
-    rejectLeave,
-    updatePayroll,
-    processNewMonthPayroll,
-    addDocument,
-    deleteDocument,
-    addLog
-  } = useFirebase();
-
   // App navigation state
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
-  const handleSignIn = async () => {
-    try {
-      setAuthError(null);
-      await login();
-    } catch (err: any) {
-      setAuthError(err.message || 'Failed to authenticate');
+  // Core App states backed by LocalStorage hydration
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    const local = localStorage.getItem('nexus_employees');
+    return local ? JSON.parse(local) : INITIAL_EMPLOYEES;
+  });
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
+    const local = localStorage.getItem('nexus_attendance');
+    return local ? JSON.parse(local) : INITIAL_ATTENDANCE;
+  });
+  const [leaves, setLeaves] = useState<LeaveRequest[]>(() => {
+    const local = localStorage.getItem('nexus_leaves');
+    return local ? JSON.parse(local) : INITIAL_LEAVES;
+  });
+  const [payroll, setPayroll] = useState<PayrollRecord[]>(() => {
+    const local = localStorage.getItem('nexus_payroll');
+    return local ? JSON.parse(local) : INITIAL_PAYROLL;
+  });
+  const [documents, setDocuments] = useState<DocumentRecord[]>(() => {
+    const local = localStorage.getItem('nexus_docs');
+    return local ? JSON.parse(local) : INITIAL_DOCUMENTS;
+  });
+  const [logs, setLogs] = useState<ActivityLog[]>(() => {
+    const local = localStorage.getItem('nexus_logs');
+    return local ? JSON.parse(local) : INITIAL_LOGS;
+  });
+
+  // Sync to local storage
+  useEffect(() => {
+    localStorage.setItem('nexus_employees', JSON.stringify(employees));
+  }, [employees]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_attendance', JSON.stringify(attendance));
+  }, [attendance]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_leaves', JSON.stringify(leaves));
+  }, [leaves]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_payroll', JSON.stringify(payroll));
+  }, [payroll]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_docs', JSON.stringify(documents));
+  }, [documents]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_logs', JSON.stringify(logs));
+  }, [logs]);
+
+  // Logging Helper
+  const addLog = (type: ActivityLog['type'], description: string, user: string) => {
+    const now = new Date();
+    const timestamp = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const newLog: ActivityLog = {
+      id: `LOG-${Date.now()}`,
+      timestamp,
+      type,
+      description,
+      user
+    };
+    setLogs(prev => [newLog, ...prev]);
+  };
+
+  // --- MUTATOR HANDLERS ---
+  const addEmployee = (newEmpData: Omit<Employee, 'id'>) => {
+    const numericIds = employees.map(e => parseInt(e.id.split('-')[1]) || 100);
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 100;
+    const nextId = `EMP-${maxId + 1}`;
+
+    const newEmp: Employee = {
+      id: nextId,
+      ...newEmpData
+    };
+    setEmployees(prev => [...prev, newEmp]);
+
+    // Also auto-append current month payroll outline structure for this new staff
+    const currentMonthStr = "2026-05";
+    const newPayroll: PayrollRecord = {
+      id: `PR-${Date.now()}`,
+      employeeId: nextId,
+      employeeName: `${newEmp.firstName} ${newEmp.lastName}`,
+      department: newEmp.department,
+      month: currentMonthStr,
+      baseSalary: Math.round(newEmp.salary / 12),
+      allowance: 0,
+      deductions: Math.round((newEmp.salary / 12) * 0.22),
+      netSalary: Math.round((newEmp.salary / 12) * 0.78),
+      status: 'Processed'
+    };
+    setPayroll(prev => [newPayroll, ...prev]);
+    addLog('employee', `Added new staff personnel ${newEmp.firstName} ${newEmp.lastName}`, "Admin");
+  };
+
+  const editEmployee = (editedEmp: Employee) => {
+    setEmployees(prev => prev.map(e => e.id === editedEmp.id ? editedEmp : e));
+    setPayroll(prev => prev.map(p => p.employeeId === editedEmp.id ? {
+      ...p,
+      employeeName: `${editedEmp.firstName} ${editedEmp.lastName}`,
+      department: editedEmp.department,
+      baseSalary: Math.round(editedEmp.salary / 12)
+    }: p));
+    addLog('employee', `Edited record parameters for ${editedEmp.firstName} ${editedEmp.lastName}`, "Admin");
+  };
+
+  const deleteEmployee = (id: string) => {
+    const emp = employees.find(e => e.id === id);
+    setEmployees(prev => prev.filter(e => e.id !== id));
+    if (emp) {
+      addLog('employee', `Terminated / removed employee record ${emp.firstName} ${emp.lastName}`, "Admin");
     }
   };
 
-  // Render authentic high-quality login screen if not authenticated
-  if (loadingAuth) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 font-sans animate-fade-in">
-        <div className="flex flex-col items-center space-y-4 max-w-sm text-center">
-          <Building className="w-12 h-12 text-indigo-505 animate-pulse" />
-          <h1 className="text-xl font-bold tracking-wider">SECURE NEXUS ERP</h1>
-          <p className="text-slate-400 font-mono text-xs">Decentralized Credentials Core Syncing...</p>
-          <div className="w-16 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 w-1/2 animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const checkIn = (employeeId: string, checkInTime: string, notes?: string) => {
+    const matchedEmployee = employees.find(e => e.id === employeeId);
+    if (!matchedEmployee) return;
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 font-sans relative overflow-hidden">
-        {/* Decorative Grid Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40"></div>
-        
-        <div className="max-w-md w-full bg-slate-900/80 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-xl shadow-slate-950/50 space-y-8 relative z-10">
-          
-          <div className="flex flex-col items-center text-center space-y-3">
-            <span className="p-3 bg-indigo-950/50 border border-indigo-900/50 text-indigo-400 rounded-2xl shadow-inner mb-2">
-              <Building className="w-8 h-8" />
-            </span>
-            <h1 className="text-2xl font-black uppercase tracking-wider text-white">NEXUS ENTERPRISE</h1>
-            <p className="text-slate-400 font-medium text-xs max-w-xs leading-relaxed">
-              Enterprise administration and timesheet portal. Integrate verified single sign-on credentials.
-            </p>
-          </div>
+    const isLate = checkInTime > "09:00";
+    const status: AttendanceStatus = isLate ? 'Late' : 'Present';
 
-          <div className="space-y-4">
-            {authError && (
-              <div className="p-3 bg-red-950/50 border border-red-900/50 text-red-400 rounded-xl text-xs font-mono">
-                {authError}
-              </div>
-            )}
+    const newAttendance: AttendanceRecord = {
+      id: `AT-${Date.now()}`,
+      employeeId,
+      employeeName: `${matchedEmployee.firstName} ${matchedEmployee.lastName}`,
+      date: "2026-05-30",
+      checkIn: checkInTime,
+      status,
+      notes: notes || ""
+    };
+    
+    setAttendance(prev => [newAttendance, ...prev]);
+    addLog('attendance', `Personnel ${matchedEmployee.firstName} ${matchedEmployee.lastName} checked in (${checkInTime}) Today. Status: ${status.toUpperCase()}`, "Lobby Terminal");
+  };
 
-            {authError && authError.toLowerCase().includes('unauthorized-domain') && (
-              <div className="p-4 bg-slate-950/80 border border-indigo-500/30 rounded-xl space-y-3 text-xs text-left">
-                <div className="flex items-center gap-2 text-indigo-400 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                  <span>Domain Authorization Required</span>
-                </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Firebase security rules require you to whitelist this domain before Google Single Sign-On can authenticate calls. Follow these quick steps:
-                </p>
-                <ol className="list-decimal list-inside space-y-2 text-slate-400 text-[10px] bg-slate-900/80 p-3 rounded-lg border border-slate-800 font-mono">
-                  <li>Open the <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline font-semibold">Firebase Console</a></li>
-                  <li>Go to <strong>Authentication</strong> &rarr; <strong>Settings</strong> tab</li>
-                  <li>Select <strong>Authorized domains</strong></li>
-                  <li>Click <strong>Add domain</strong> and paste:
-                    <div className="mt-1.5 flex items-center justify-between bg-slate-950 border border-slate-800 p-1.5 rounded font-semibold text-white select-all text-[11px]">
-                      <span>{window.location.hostname}</span>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(window.location.hostname);
-                          alert('Domain copied successfully!');
-                        }}
-                        className="text-[9px] bg-indigo-600 hover:bg-indigo-500 text-white rounded px-1.5 py-0.5 cursor-pointer transition"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </li>
-                </ol>
-                <span className="block text-[10px] text-slate-500 font-medium text-center italic">Once added, refresh this browser tab and try again.</span>
-              </div>
-            )}
+  const checkOut = (employeeId: string, checkOutTime: string) => {
+    setAttendance(prev => prev.map(log => {
+      if (log.employeeId === employeeId && log.date === "2026-05-30" && !log.checkOut) {
+        addLog('attendance', `Personnel ${log.employeeName} checked out successfully (${checkOutTime}) today.`, "Lobby Terminal");
+        return { ...log, checkOut: checkOutTime };
+      }
+      return log;
+    }));
+  };
 
-            <button
-              onClick={handleSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-bold p-3.5 rounded-xl transition duration-150 border border-slate-200 shadow-md cursor-pointer text-xs"
-            >
-              {/* Google SVG */}
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#EA4335"
-                  d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.53-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.227-3.11C18.281 1.09 15.42 0 12.24 0 5.58 0 0 5.37 0 12s5.58 12 12.24 12c6.96 0 11.57-4.89 11.57-11.79 0-.79-.086-1.39-.19-1.925H12.24z"
-                />
-              </svg>
-              <span>Connect Google Identity</span>
-            </button>
-          </div>
+  const updateAttendanceStatus = (recordId: string, status: AttendanceStatus, notes?: string) => {
+    setAttendance(prev => prev.map(log => {
+      if (log.id === recordId) {
+        return { ...log, status, notes: notes || "" };
+      }
+      return log;
+    }));
+    const logObj = attendance.find(a => a.id === recordId);
+    if (logObj) {
+      addLog('attendance', `Overrode attendance for ${logObj.employeeName} manually to ${status.toUpperCase()}`, "Admin");
+    }
+  };
 
-          <div className="border-t border-slate-800/85 pt-5 text-center text-[10px] text-slate-500 font-mono flex flex-col space-y-1">
-            <span>Enterprise database: carbide-clover-p4jp1</span>
-            <span>Security level: ZERO-TRUST LEVEL 4</span>
-          </div>
+  const submitLeaveRequest = (newRequestData: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'employeeName'>) => {
+    const matchedEmp = employees.find(e => e.id === newRequestData.employeeId);
+    if (!matchedEmp) return;
 
-        </div>
-      </div>
-    );
-  }
+    const newRequest: LeaveRequest = {
+      id: `LV-${Date.now()}`,
+      employeeName: `${matchedEmp.firstName} ${matchedEmp.lastName}`,
+      createdAt: new Date().toISOString().split('T')[0],
+      status: 'Pending',
+      ...newRequestData
+    };
+
+    setLeaves(prev => [newRequest, ...prev]);
+    addLog('leave', `Submitted leave request for ${newRequest.employeeName} from ${newRequest.startDate} to ${newRequest.endDate}`, "Employee");
+  };
+
+  const approveLeave = (id: string) => {
+    setLeaves(prev => prev.map(l => l.id === id ? { ...l, status: 'Approved' } : l));
+    const leaveReq = leaves.find(l => l.id === id);
+    if (leaveReq) {
+      setEmployees(prev => prev.map(e => e.id === leaveReq.employeeId ? { ...e, status: 'On Leave' } : e));
+      const newAttendancePlaceholder: AttendanceRecord = {
+        id: `AT-${Date.now()}`,
+        employeeId: leaveReq.employeeId,
+        employeeName: leaveReq.employeeName,
+        date: "2026-05-30",
+        status: 'On Leave',
+        notes: `Authorized Leave (${leaveReq.leaveType})`
+      };
+      setAttendance(prev => [newAttendancePlaceholder, ...prev]);
+      addLog('leave', `Approved leave request for ${leaveReq.employeeName} (${leaveReq.leaveType})`, "Admin");
+    }
+  };
+
+  const rejectLeave = (id: string) => {
+    setLeaves(prev => prev.map(l => l.id === id ? { ...l, status: 'Rejected' } : l));
+    const leaveReq = leaves.find(l => l.id === id);
+    if (leaveReq) {
+      addLog('leave', `Rejected leave request for ${leaveReq.employeeName}`, "Admin");
+    }
+  };
+
+  const updatePayroll = (recordId: string, allowance: number, deductions: number, status: PayrollStatus) => {
+    setPayroll(prev => prev.map(p => {
+      if (p.id === recordId) {
+        const netSalary = Math.round(p.baseSalary + allowance - deductions);
+        return {
+          ...p,
+          allowance,
+          deductions,
+          netSalary,
+          status,
+          processedDate: status !== 'Hold' ? new Date().toISOString().split('T')[0] : p.processedDate
+        };
+      }
+      return p;
+    }));
+    const record = payroll.find(p => p.id === recordId);
+    if (record) {
+      const netVal = Math.round(record.baseSalary + allowance - deductions);
+      addLog('payroll', `Updated payroll for ${record.employeeName} (Month: ${record.month}) to NET: $${netVal.toLocaleString()}`, "Admin");
+    }
+  };
+
+  const processNewMonthPayroll = (month: string) => {
+    const existingForMonth = payroll.some(p => p.month === month);
+    if (existingForMonth) return;
+
+    const newMonthBatch: PayrollRecord[] = employees
+      .filter(emp => emp.status !== 'Suspended')
+      .map(emp => ({
+        id: `PR-${Date.now()}-${emp.id}`,
+        employeeId: emp.id,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        department: emp.department,
+        month,
+        baseSalary: Math.round(emp.salary / 12),
+        allowance: 0,
+        deductions: Math.round((emp.salary / 12) * 0.20),
+        netSalary: Math.round((emp.salary / 12) * 0.80),
+        status: 'Processed'
+      }));
+
+    setPayroll(prev => [...newMonthBatch, ...prev]);
+    addLog('payroll', `Generated whole payroll register batch outlines for target month: ${month}`, "Admin");
+  };
+
+  const addDocument = (newDoc: Omit<DocumentRecord, 'id' | 'uploadDate'>) => {
+    const newDocument: DocumentRecord = {
+      id: `DOC-${Date.now()}`,
+      uploadDate: new Date().toISOString().split('T')[0],
+      ...newDoc
+    };
+    setDocuments(prev => [newDocument, ...prev]);
+    addLog('document', `Uploaded new Document: ${newDocument.title} (${newDocument.type})`, "Admin");
+  };
+
+  const deleteDocument = (id: string) => {
+    const docObj = documents.find(d => d.id === id);
+    setDocuments(prev => prev.filter(d => d.id !== id));
+    if (docObj) {
+      addLog('document', `Deleted document: ${docObj.title}`, "Admin");
+    }
+  };
 
 
   // TAB LAYOUTS COUPLING
@@ -334,35 +469,18 @@ export default function App() {
         </nav>
 
         {/* User Context profile footer */}
-        <div className="p-4 border-t border-slate-800/60 bg-slate-900/30 text-xs space-y-2">
+        <div className="p-4 border-t border-slate-800/60 bg-slate-900/30 text-xs">
           <div className="flex items-center gap-3 bg-slate-900/50 border border-slate-800/40 p-3 rounded-xl">
-            {user.photoURL ? (
-              <img 
-                src={user.photoURL} 
-                alt="profile" 
-                className="w-8 h-8 rounded-full border border-slate-700"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white font-mono uppercase text-xs">
-                {(user.displayName || user.email || 'A').charAt(0)}
-              </div>
-            )}
+            <div className="w-8 h-8 rounded-full bg-indigo-950 border border-indigo-700 flex items-center justify-center font-bold text-indigo-400 font-mono uppercase text-xs">
+              EA
+            </div>
             <div className="space-y-0.5 truncate flex-1">
-              <p className="font-extrabold text-slate-100 font-mono text-[10px] truncate">{user.displayName || user.email}</p>
+              <p className="font-extrabold text-slate-100 font-mono text-[10px] truncate">Admin User</p>
               <p className="text-[9px] text-slate-500 font-bold uppercase font-sans tracking-wide">
-                {user.email === 'rishikajat03@gmail.com' ? 'Enterprise Admin' : 'Staff Member'}
+                Enterprise Admin
               </p>
             </div>
           </div>
-          
-          <button 
-            onClick={() => logout()}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 hover:text-red-405 transition text-slate-400 cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out Identity</span>
-          </button>
         </div>
 
       </aside>
