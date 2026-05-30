@@ -122,6 +122,38 @@ export default function App() {
               </div>
             )}
 
+            {authError && authError.toLowerCase().includes('unauthorized-domain') && (
+              <div className="p-4 bg-slate-950/80 border border-indigo-500/30 rounded-xl space-y-3 text-xs text-left">
+                <div className="flex items-center gap-2 text-indigo-400 font-bold">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                  <span>Domain Authorization Required</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Firebase security rules require you to whitelist this domain before Google Single Sign-On can authenticate calls. Follow these quick steps:
+                </p>
+                <ol className="list-decimal list-inside space-y-2 text-slate-400 text-[10px] bg-slate-900/80 p-3 rounded-lg border border-slate-800 font-mono">
+                  <li>Open the <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline font-semibold">Firebase Console</a></li>
+                  <li>Go to <strong>Authentication</strong> &rarr; <strong>Settings</strong> tab</li>
+                  <li>Select <strong>Authorized domains</strong></li>
+                  <li>Click <strong>Add domain</strong> and paste:
+                    <div className="mt-1.5 flex items-center justify-between bg-slate-950 border border-slate-800 p-1.5 rounded font-semibold text-white select-all text-[11px]">
+                      <span>{window.location.hostname}</span>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(window.location.hostname);
+                          alert('Domain copied successfully!');
+                        }}
+                        className="text-[9px] bg-indigo-600 hover:bg-indigo-500 text-white rounded px-1.5 py-0.5 cursor-pointer transition"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </li>
+                </ol>
+                <span className="block text-[10px] text-slate-500 font-medium text-center italic">Once added, refresh this browser tab and try again.</span>
+              </div>
+            )}
+
             <button
               onClick={handleSignIn}
               className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-bold p-3.5 rounded-xl transition duration-150 border border-slate-200 shadow-md cursor-pointer text-xs"
