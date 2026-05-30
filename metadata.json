@@ -1,0 +1,6 @@
+{
+  "name": "HR & Employee Management System",
+  "description": "A comprehensive HR and Employee Management System for small and medium companies, including Employee Records, Leave Management, Attendance, Payroll, and Document Storage, powered by an AI HR Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

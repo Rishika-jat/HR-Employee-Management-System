@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == "rishikajat03@gmail.com" || 
+        request.auth.token.email.endsWith("@nexus.io")
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity validator: Employee
+    function isValidEmployee(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.firstName is string && data.firstName.size() <= 100 &&
+             data.lastName is string && data.lastName.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             data.phone is string && data.phone.size() <= 30 &&
+             data.department is string && data.department.size() <= 100 &&
+             data.role is string && data.role.size() <= 100 &&
+             data.status in ['Active', 'On Leave', 'Suspended'] &&
+             data.joiningDate is string && data.joiningDate.size() <= 15 &&
+             data.salary is number && data.salary >= 0 &&
+             data.gender is string && data.gender.size() <= 20 &&
+             data.dob is string && data.dob.size() <= 15;
+    }
+
+    // Entity validator: LeaveRequest
+    function isValidLeaveRequest(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.employeeId is string && data.employeeId.size() <= 50 &&
+             data.employeeName is string && data.employeeName.size() <= 200 &&
+             data.leaveType in ['Annual', 'Sick', 'Maternity', 'Unpaid'] &&
+             data.startDate is string && data.startDate.size() <= 15 &&
+             data.endDate is string && data.endDate.size() <= 15 &&
+             data.reason is string && data.reason.size() <= 1000 &&
+             data.status in ['Pending', 'Approved', 'Rejected'] &&
+             data.createdAt is string && data.createdAt.size() <= 15;
+    }
+
+    // Entity validator: AttendanceRecord
+    function isValidAttendance(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.employeeId is string && data.employeeId.size() <= 50 &&
+             data.employeeName is string && data.employeeName.size() <= 200 &&
+             data.date is string && data.date.size() <= 15 &&
+             data.status in ['Present', 'Absent', 'Late', 'On Leave'] &&
+             (!('checkIn' in data) || data.checkIn is string) &&
+             (!('checkOut' in data) || data.checkOut is string) &&
+             (!('notes' in data) || data.notes is string);
+    }
+
+    // Entity validator: PayrollRecord
+    function isValidPayroll(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.employeeId is string && data.employeeId.size() <= 50 &&
+             data.employeeName is string && data.employeeName.size() <= 200 &&
+             data.department is string && data.department.size() <= 100 &&
+             data.month is string && data.month.size() <= 10 &&
+             data.baseSalary is number && data.baseSalary >= 0 &&
+             data.allowance is number && data.allowance >= 0 &&
+             data.deductions is number && data.deductions >= 0 &&
+             data.netSalary is number && data.netSalary >= 0 &&
+             data.status in ['Processed', 'Paid', 'Hold'] &&
+             (!('processedDate' in data) || data.processedDate is string);
+    }
+
+    // Entity validator: DocumentRecord
+    function isValidDocument(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.type in ['Contract', 'ID Proof', 'Policy', 'Review', 'Other', 'Onboarding'] &&
+             data.uploadDate is string && data.uploadDate.size() <= 15 &&
+             data.fileSize is string && data.fileSize.size() <= 30 &&
+             (!('employeeId' in data) || data.employeeId is string) &&
+             (!('employeeName' in data) || data.employeeName is string) &&
+             (!('contentSnippet' in data) || data.contentSnippet is string) &&
+             (!('summary' in data) || data.summary is string);
+    }
+
+    // Entity validator: ActivityLog
+    function isValidLog(data) {
+      return data.id is string && data.id.size() <= 50 &&
+             data.timestamp is string && data.timestamp.size() <= 30 &&
+             data.type in ['employee', 'leave', 'attendance', 'payroll', 'document'] &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.user is string && data.user.size() <= 150;
+    }
+
+    // Match blocks
+
+    match /employees/{employeeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(employeeId) && isValidEmployee(incoming());
+      allow update: if isSignedIn() && isValidEmployee(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /leaves/{leaveId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(leaveId) && isValidLeaveRequest(incoming());
+      allow update: if isSignedIn() && isValidLeaveRequest(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming());
+      allow update: if isSignedIn() && isValidAttendance(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /payroll/{payrollId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(payrollId) && isValidPayroll(incoming());
+      allow update: if isSignedIn() && isValidPayroll(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /documents/{documentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(documentId) && isValidDocument(incoming());
+      allow update: if isSignedIn() && isValidDocument(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(logId) && isValidLog(incoming());
+      allow update, delete: if false; // Logs are write-once read-many audit trails
+    }
+  }
+}

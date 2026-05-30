@@ -1,0 +1,134 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "An employee personnel record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "department": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "On Leave", "Suspended"] },
+        "joiningDate": { "type": "string" },
+        "salary": { "type": "number" },
+        "photoUrl": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "gender": { "type": "string" },
+        "dob": { "type": "string" }
+      },
+      "required": ["id", "firstName", "lastName", "email", "phone", "department", "role", "status", "joiningDate", "salary", "gender", "dob"]
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "description": "An employee leave request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "leaveType": { "type": "string", "enum": ["Annual", "Sick", "Maternity", "Unpaid"] },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "leaveType", "startDate", "endDate", "reason", "status", "createdAt"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "An employee daily attendance log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string" },
+        "checkIn": { "type": "string" },
+        "checkOut": { "type": "string" },
+        "status": { "type": "string", "enum": ["Present", "Absent", "Late", "On Leave"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "date", "status"]
+    },
+    "PayrollRecord": {
+      "title": "PayrollRecord",
+      "description": "An employee monthly payroll calculation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "department": { "type": "string" },
+        "month": { "type": "string" },
+        "baseSalary": { "type": "number" },
+        "allowance": { "type": "number" },
+        "deductions": { "type": "number" },
+        "netSalary": { "type": "number" },
+        "status": { "type": "string", "enum": ["Processed", "Paid", "Hold"] },
+        "processedDate": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "department", "month", "baseSalary", "allowance", "deductions", "netSalary", "status"]
+    },
+    "DocumentRecord": {
+      "title": "DocumentRecord",
+      "description": "An enterprise or employee specific document definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["Contract", "ID Proof", "Policy", "Review", "Other", "Onboarding"] },
+        "uploadDate": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "contentSnippet": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "uploadDate", "fileSize"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit trail log of all structural ERP actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "type": { "type": "string", "enum": ["employee", "leave", "attendance", "payroll", "document"] },
+        "description": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "type", "description", "user"]
+    }
+  },
+  "firestore": {
+    "employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Collection of employee objects mapped by custom ID"
+    },
+    "attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Collection of staff attendance entries"
+    },
+    "leaves/{leaveId}": {
+      "schema": "LeaveRequest",
+      "description": "Collection of leave requests and tracking states"
+    },
+    "payroll/{payrollId}": {
+      "schema": "PayrollRecord",
+      "description": "Monthly payroll register entries"
+    },
+    "documents/{documentId}": {
+      "schema": "DocumentRecord",
+      "description": "Company policy and personnel documents"
+    },
+    "logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "System-wide action audit trail logs"
+    }
+  }
+}
